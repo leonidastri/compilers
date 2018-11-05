@@ -1,0 +1,98 @@
+/* Simple +/-/* expression language; parser evaluates constant expressions on the fly*/
+/**
+ *  Package and Import Specifications
+ */
+import java_cup.runtime.*;
+
+/**
+ *  Usercode Components
+ */
+parser code {:
+    // Connect this parser to a scanner!
+    Scanner s;
+    Parser(Scanner s){ this.s=s; }
+:}
+
+/* define how to connect to the scanner! */
+scan with {: return s.next_token(); :};
+
+/**
+ *  Symbol Lists
+ */
+
+/* Terminals (tokens returned by the scanner). */
+terminal            SEMI, PLUS, LBRACKET, RBRACKET, LPAREN, RPAREN, COMMA, EQ, IF, ELSE, IN;
+terminal String 	STRING_LITERAL, IDENTIFIER;
+
+/*  Non terminals */
+non terminal String    Prog, Defs, Def, Calls, Call, Call2, Arglist1,Arglist2, Arglist3, Body1,Body2, Body3, Condition1,Condition3, IfBody1,IfBody3;      // used to store evaluated subexpressions
+
+/**
+ *  Precedence Declarations
+ */
+
+/**
+ *  The Grammar Rules
+ */
+
+Prog ::= Defs:defs Calls:calls {: System.out.println("public class Main {\n\n\tpublic static void main(String[] args) { " + calls + "\n\t}\n"  + defs + "\n}"); :}
+;
+Defs ::= Defs:defs Def:def {: RESULT = def + defs; :}
+		|				   {: RESULT = ""; :}
+;
+Def ::= IDENTIFIER:id LPAREN Arglist2:e1 RPAREN LBRACKET Body3:e2 RBRACKET			{: RESULT = "\n\tpublic static String " + id + "(" + e1 + ")" + " {\n\t\treturn " + e2 + ";\n\t}\n"; :}
+		| IDENTIFIER:id LPAREN RPAREN LBRACKET Body3:e2 RBRACKET						{: RESULT = "\n\tpublic static String " + id + "()" + " {\n\t\treturn " + e2 + ";\n\t}\n"; :}
+;
+IfBody1 ::= IF LPAREN Condition1:c RPAREN Body1:stm1 ELSE Body1:stm2 	{: RESULT = c + " (" + stm1 + ") : (" + stm2 + ")"; :} 		/* Outside functions */
+;
+IfBody3 ::= IF LPAREN Condition3:c RPAREN Body3:stm1 ELSE Body3:stm2 	{: RESULT = c + " (" + stm1 + ") : (" + stm2 + ")"; :}		/* Inside functions */
+;
+Condition1 ::= STRING_LITERAL:a1 EQ Body1:a2				{: RESULT = "( " + "\"" + a1 + "\"" + ".equals(" + a2 + ") ) ? "; :}	/* Outside functions */
+			| Call:a1 EQ Body1:a2					{: RESULT = "( " + a1 + ".equals(" + a2 + ") ) ? "; :}
+			| Body1:a2 IN STRING_LITERAL:a1				{: RESULT = "( " + "\"" + a1 + "\"" + ".contains(" + a2 + ") ) ? "; :}
+			| Body1:a2 IN Call:a1					{: RESULT = "( " + a1 + ".contains(" + a2 + ") ) ? "; :}
+;
+Condition3 ::= STRING_LITERAL:a1 EQ Body3:a2			{: RESULT = "( " + "\"" + a1 + "\"" + ".equals(" + a2 + ") ) ? "; :}		/* Inside functions */
+			| IDENTIFIER:a1 EQ Body3:a2					{: RESULT = "( " + a1 + ".equals(" + a2 + ") ) ? "; :}
+			| Call2:a1 EQ Body3:a2						{: RESULT = "( " + a1 + ".equals(" + a2 + ") ) ? "; :}
+			| Body3:a2 IN STRING_LITERAL:a1				{: RESULT = "( " + "\"" + a1 + "\"" + ".contains(" + a2 + ") ) ? "; :}
+			| Body3:a2 IN IDENTIFIER:a1					{: RESULT = "( " + a1 + ".contains(" + a2 + ") ) ? "; :}
+			| Body3:a2 IN Call2:a1						{: RESULT = "( " + a1 + ".contains(" + a2 + ") ) ? "; :}
+;
+Body1 ::= STRING_LITERAL:e1 PLUS Body1:e2					{: RESULT = "\"" + e1 + "\"" + " + " + e2; :}							/* Outside functions */
+		| Call:e1 PLUS Body1:e2								{: RESULT = e1 + " + " + e2; :}
+		| STRING_LITERAL:e1									{: RESULT = "\"" + e1 + "\""; :}
+		| LPAREN IfBody1:e1 RPAREN PLUS Body1:e2			{: RESULT = "(" + e1 + ") + " + e2; :}
+		| Call:e1											{: RESULT = e1; :}
+		| IfBody1:e1										{: RESULT = e1; :}
+;
+Body2 ::= IDENTIFIER:e1										{: RESULT = e1; :}														/* Defs */
+;
+Body3 ::= IDENTIFIER:e1 PLUS Body3:e2 						{: RESULT = e1 + " + " + e2; :}											/* Inside functions */
+		| STRING_LITERAL:e1 PLUS Body3:e2					{: RESULT = "\"" + e1 + "\"" + " + " + e2; :}
+		| Call2:e1 PLUS Body3:e2							{: RESULT = e1 + " + " + e2; :}
+		| STRING_LITERAL:e1									{: RESULT = "\"" + e1 + "\""; :}
+		| LPAREN IfBody3:e1 RPAREN PLUS Body3:e2			{: RESULT = "(" + e1 + ") + " + e2; :}
+		| Call2:e1											{: RESULT = e1; :}
+		| IDENTIFIER:e1										{: RESULT = e1; :}
+		| IfBody3:e1										{: RESULT = e1; :}
+;
+Calls ::= Call:call Calls:calls		{: RESULT = "\n\t\tSystem.out.println( " + call + ");" + calls; :}
+		| 							{: RESULT = ""; :}
+;
+Call ::= IDENTIFIER:id LPAREN Arglist1:e1 RPAREN		{: RESULT = id + "(" + e1 + ")"; :}		/* Calls outside functions */
+		| IDENTIFIER:id LPAREN RPAREN					{: RESULT = id + "()"; :}
+;
+Call2 ::= IDENTIFIER:id LPAREN Arglist3:e1 RPAREN		{: RESULT = id + "(" + e1 + ")"; :}		/* Calls inside functions */
+		| IDENTIFIER:id LPAREN RPAREN					{: RESULT = id + "()"; :}
+;
+Arglist1 ::= Body1:e1 COMMA Arglist1:e2		{: RESULT = e1 + ", " + e2; :}						/* For calls outside functions */
+		| Body1:e1							{: RESULT = e1; :}
+;
+Arglist2 ::= Body2:e1 COMMA Arglist2:e2		{: RESULT = "String " + e1 + ", " + e2; :}			/* For defs */
+		| Body2:e1							{: RESULT = "String " + e1; :}
+;
+
+Arglist3 ::= Body3:e1 COMMA Arglist3:e2		{: RESULT = e1 + ", " + e2; :}						/* For calls inside functions */
+		| Body3:e1							{: RESULT = e1; :}
+;
